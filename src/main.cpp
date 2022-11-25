@@ -110,9 +110,11 @@ ISR(TIMER2_COMPA_vect) {
         // State is not blanking
         blanking = false;
 
+        PORTD |= _BV(PORTD6);
+
         // Set the timer to illuminate the digit (e.g., for 900uS)
         // OCR: Output Compare Register
-        OCR2A = 200;
+        OCR2A = 224;
     } else {
 #if TIMER_INTERRUPT_DIAGNOSTIC_2
         avg_display_time += micros() - start;
@@ -120,16 +122,14 @@ ISR(TIMER2_COMPA_vect) {
         start = micros();
 #endif
         // blank_display
-        PORTB &= B00000000;
+        PORTD &= ~_BV(PORTD6);
 
         // State is blanking
         blanking = true;
 
         // Set the timer to blank for, e.g., 100uS. See above
-        OCR2A = 56;
+        OCR2A = 24;
     }
-
-    // TCNT2 = 0;
 
 #if TIMER_INTERRUPT_DIAGNOSTIC
     PORTD &= ~TIMER_INTERRUPT_TEST_PIN;

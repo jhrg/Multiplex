@@ -5,6 +5,7 @@
 #include <Arduino.h>
 
 #define CLOCK_1HZ 2  // Pin D2, INT0
+#define TIMER_INTERRUPT_TEST_PIN B10000000  // Pin D7
 
 // Set HIGH when the 1 second interrupt been triggered by the clock
 volatile byte tick = LOW;
@@ -75,21 +76,64 @@ void setup() {
     // Set up timer 2 - controls the display multiplexing
 
     // set timer2 interrupt at 950uS. Toggles between 950 and 50 uS
-    TCCR1A = 0;  // set entire TCCR2A register to 0
-    TCCR1B = 0;  // same for TCCR0B
-    TCNT1 = 0;   // initialize counter value to 0
+    TCCR2A = 0;  // set entire TCCR2A register to 0
+    TCCR2B = 0;  // same for TCCR0B
+    TCNT2 = 0;   // initialize counter value to 0
 
     // set compare match register for 900uS increments
-    OCR1A = 224;  // = [(16*10^6 / 64 ) * 0.000 900] - 1; (must be <256)
+    // OCR2A = 224;  // = [(16*10^6 / 64 ) * 0.000 900] - 1; (must be <256)
 
     // turn on CTC mode
-    TCCR1A |= (1 << WGM21);
+    TCCR2A |= (1 << WGM21);
     // Set CS22 bit for 64 pre-scaler --> B00000100
-    TCCR1B |= (1 << CS22);
-    // enable timer compare interrupt
-    TIMSK1 |= (1 << OCIE1A);
+    TCCR2B |= (1 << CS22);
+    // enable timer compare interrupt; TIMSK: Timer interrupt mask
+    TIMSK2 |= (1 << OCIE2A);
 
     sei();  // start interrupts
+}
+
+ISR(TIMER2_COMPA_vect) {
+    static bool blanking = true;
+    // See https://www.nongnu.org/avr-libc/user-manual/group__avr__interrupts.html
+#if TIMER_INTERRUPT_DIAGNOSTIC
+    PORTD |= TIMER_INTERRUPT_TEST_PIN;
+#endif
+
+    // If the current state is blanking, stop blanking and enter digit display state
+    if (blanking) {
+#if TIMER_INTERRUPT_DIAGNOSTIC_2
+        avg_blanking_time += micros() - start;
+        avg_blanking_time = avg_blanking_time >> 1;
+        start = micros();
+#endif
+        // State is not blanking
+        blanking = false;
+
+        // Set the timer to illuminate the digit (e.g., for 900uS)
+        // OCR: Output Compare Register
+        OCR2A = 200;
+    } else {
+#if TIMER_INTERRUPT_DIAGNOSTIC_2
+        avg_display_time += micros() - start;
+        avg_display_time = avg_display_time >> 1;
+        start = micros();
+#endif
+        // blank_display
+        PORTB &= B00000000;
+
+        // State is blanking
+        blanking = true;
+
+        // Set the timer to blank for, e.g., 100uS. See above
+        OCR2A = 56;
+    }
+
+    // TCNT2 = 0;
+
+#if TIMER_INTERRUPT_DIAGNOSTIC
+    PORTD &= ~TIMER_INTERRUPT_TEST_PIN;
+#endif
 }
 
 void old_setup() {
@@ -115,16 +159,7 @@ void old_setup() {
 
     // Start out with low voltage
     OCR1A = 0x010;  // 9-bit resolution --> 0x0000 - 0x01FF
-
-#if PID_LOGGING
-    Serial.println("voltage, error, delta_t, cum_error, rate_error, correction, OCR1A");
-#elif SIMPLE_LOGGING
-    Serial.println("voltage, OCR1A");
-#endif
-
-    last_time = millis();
 }
 
 void loop() {
-    int32_t now = millis();
 }
